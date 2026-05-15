@@ -48,6 +48,19 @@ AGENT_ID = "<your-agent-id>"
 AGENT_NAME = "<Your Display Name>"
 AGENT_PRIVATE_KEY = "<base64-PKCS8-private-key>"
 WIRE_URL = "https://the-wire.ngrok.io"   # or http://localhost:9800
+# Forward terminal-multiplexer env vars so wire-tools' push-delivery
+# transport can detect the multiplexer it's running inside. Codex
+# sanitizes the MCP child env to only what's listed here — $STY etc.
+# from the spawning shell will NOT propagate without explicit forwarding.
+# Without these, codex agents fall back to poll-mode
+# (`get_pending_messages`) instead of getting Wire messages pushed into
+# their screen as new turns.
+STY = "${STY:-}"
+TMUX = "${TMUX:-}"
+TMUX_PANE = "${TMUX_PANE:-}"
+CMUX_SURFACE_ID = "${CMUX_SURFACE_ID:-}"
+TERM_PROGRAM = "${TERM_PROGRAM:-}"
+ITERM_SESSION_ID = "${ITERM_SESSION_ID:-}"
 
 [mcp_servers.wire-ipc]
 command = "tsx"
