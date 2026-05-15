@@ -1,6 +1,6 @@
 # Setup — Codex
 
-Setup the Agiterra plugins on OpenAI Codex CLI, from zero.
+Setup the Agiterra Toolkit on OpenAI Codex CLI, from zero.
 
 Codex has no plugin marketplace, so MCP servers are wired via `~/.codex/config.toml` (or a per-spawn config — see below).
 
@@ -32,7 +32,7 @@ Wire is now on `http://localhost:9800`.
 
 Codex MCP entries reference repo paths and run via `tsx` (codex's `rmcp` client hangs on `bun`-spawned stdio children, but `tsx` handshakes cleanly).
 
-Add the Agiterra MCPs to `~/.codex/config.toml`:
+Add the Toolkit MCPs to `~/.codex/config.toml`:
 
 ```toml
 [features]

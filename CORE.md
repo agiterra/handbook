@@ -1,10 +1,10 @@
 # Core concepts
 
-The 10-minute mental model for Agiterra. Read this once and the rest of the docs (and the plugins) will make sense.
+The 10-minute mental model for the Agiterra Toolkit. Read this once and the rest of the docs (and the plugins) will make sense.
 
 ## 1. Agent identities: personai vs ephemeral
 
-Agiterra distinguishes **two kinds of agents**:
+The Toolkit distinguishes **two kinds of agents**:
 
 ### Persistent agent ("personai")
 
@@ -52,11 +52,11 @@ ngrok http 9800
 
 Then set `WIRE_URL=https://your-tunnel.ngrok-free.app` on remote agents and they'll connect over the public tunnel.
 
-This is the magic that makes "Agiterra works across machines and locations" real. Your personai on your desktop can dispatch ephemerals running on a beefy cloud VM, and they all show up on the same dashboard.
+This is the magic that makes "the Toolkit works across machines and locations" real. Your personai on your desktop can dispatch ephemerals running on a beefy cloud VM, and they all show up on the same dashboard.
 
 ## 3. Knowledge vaults
 
-Agents need memory. Agiterra gives each one a **vault** — a `.knowledge/` directory of markdown files with a TOC (`MEMORY.md`), a journal (`journal.db`), and an editorial index (`session-state.md`).
+Agents need memory. The Toolkit gives each one a **vault** — a `.knowledge/` directory of markdown files with a TOC (`MEMORY.md`), a journal (`journal.db`), and an editorial index (`session-state.md`).
 
 The vault answers two questions: "what does this agent already know?" and "why are things the way they are?"
 
@@ -116,7 +116,7 @@ The dashboard is read-only by default. Some plugins (wallet, GitHub) expose writ
 
 ## 6. Sane defaults
 
-A few things Agiterra opts you into that may surprise you:
+A few things the Toolkit opts you into that may surprise you:
 
 - **Soft-reap, not hard-delete.** When an agent disconnects, its row goes grey, not gone. Identity (name, pubkey) is permanent. Re-registering the same id refreshes the row.
 - **Ed25519 signing on everything.** Inter-agent messages are signed by the sender's private key. Forgery is not a concern.
