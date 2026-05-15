@@ -1,6 +1,6 @@
 # Setup — Codex
 
-Setup the Agiterra Toolkit on OpenAI Codex CLI, from zero.
+Setup the Agiterra Multi-Agent Toolkit on OpenAI Codex CLI, from zero.
 
 Codex has no plugin marketplace, so MCP servers are wired via `~/.codex/config.toml` (or a per-spawn config — see below).
 

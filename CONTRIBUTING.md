@@ -1,6 +1,6 @@
-# Contributing to the Agiterra Toolkit
+# Contributing to the Agiterra Multi-Agent Toolkit
 
-Welcome. This doc covers what you need to know to contribute changes to the Agiterra Toolkit that we'll want to merge.
+Welcome. This doc covers what you need to know to contribute changes to the Agiterra Multi-Agent Toolkit that we'll want to merge.
 
 ## The packaging standard
 

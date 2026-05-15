@@ -1,6 +1,6 @@
 # Core concepts
 
-The 10-minute mental model for the Agiterra Toolkit. Read this once and the rest of the docs (and the plugins) will make sense.
+The 10-minute mental model for the Agiterra Multi-Agent Toolkit. Read this once and the rest of the docs (and the plugins) will make sense.
 
 ## 1. Agent identities: personai vs ephemeral
 

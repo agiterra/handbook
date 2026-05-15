@@ -1,12 +1,12 @@
 # Setup — Claude Code
 
-Setup the Agiterra Toolkit on Claude Code, from zero.
+Setup the Agiterra Multi-Agent Toolkit on Claude Code, from zero.
 
 ## Quick path (recommended)
 
 If you have a Claude Code agent open right now, just say:
 
-> "Install the Agiterra marketplace and set up the minimum-useful Agiterra Toolkit on my machine."
+> "Install the Agiterra marketplace and set up the minimum-useful Agiterra Multi-Agent Toolkit on my machine."
 
 Your agent should be able to follow [the manual path below](#manual-path) and ask only what it genuinely needs (your GitHub username, ngrok preference, etc.).
 
