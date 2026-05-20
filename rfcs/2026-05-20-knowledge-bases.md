@@ -321,3 +321,67 @@ PII guard runs against each PR's diff before opening, with awareness of which ba
 5. **Backwards-compat window.** Current `seance:summon fondant` (one-piece self-contained repo) needs to keep working until the migration completes. How long is the bridge period, and what's the migration UX for someone caught mid-stream?
 
 This appendix is intentionally open. The base model from the RFC body stands either way; this is purely about how seance's CLI/composition adapts to it.
+
+---
+
+## Appendix B: Ephemeral runtime state (for discussion)
+
+**Status: open question, awaiting team input.**
+
+The RFC body asserts ephemerals have no knowledge base. They still need *runtime state* (session-state.md, journal.db, precompact recovery) to survive within-session events like `/knowledge:recycle` and `PreCompact` snapshots. Runtime state is transient — discarded at agent close.
+
+### Proposed location
+
+Outside any vault, under crew's management:
+
+```
+~/.crew/runtime/
+  <agent_id>/
+    <session_id>/                   ← per-CC-session state
+      session-state.md
+      journal.db
+      precompact/
+        recovery-<ts>.md
+        transcript-<ts>.jsonl
+```
+
+Properties:
+
+- **Both `<agent_id>` and `<session_id>` in the path.** Prevents collisions when the same `agent_id` has multiple concurrent CC sessions on the same machine (e.g., two Fondant spawns at once). Each spawn gets its own subdirectory keyed by its own session_id.
+- **Outside the vault entirely.** No vault-level gitignore needed. Crew owns the directory and its lifecycle.
+- **No `latest` symlink needed.** Recycle preserves session_id (next section), so state at `<agent_id>/<session_id>/` survives directly.
+
+### Recycle flow
+
+`/knowledge:recycle` does NOT change the CC session_id — it clears context within the same session. Therefore:
+
+1. Agent runs `/knowledge:fast-save` → writes to `~/.crew/runtime/<agent_id>/<session_id>/session-state.md`
+2. Recycle clears context within the same session
+3. `/knowledge:boot` reads `~/.crew/runtime/<agent_id>/<session_id>/session-state.md` — same path, no copying needed
+4. Work continues
+
+Much simpler than my earlier draft. No symlinks, no copy-and-swap.
+
+### Handoff flow
+
+Handoff target has a different `agent_id` and a different `session_id`. Mechanics:
+
+1. Original agent finalizes state at `~/.crew/runtime/<orig_id>/<orig_session>/`
+2. Handoff target boots; its `/knowledge:boot` is given the origin's path explicitly (handoff metadata)
+3. Target reads the origin's `session-state.md` + relevant precompact recovery, writes its own state into `~/.crew/runtime/<target_id>/<target_session>/`
+4. Original cleans up when it closes (its own session_id dir only)
+
+### Cleanup
+
+- `crew agent_close <id>` removes `~/.crew/runtime/<id>/<session_id>/` — **the specific session's dir only**, not the whole agent_id tree. Sibling sessions of the same agent_id (concurrent spawns on this machine) keep their own state intact.
+- When an agent_id has no more session subdirs left after a close, the empty `<agent_id>/` parent can be cleaned up too (or left for next spawn — harmless).
+- `crew reconcile` periodically scans `~/.crew/runtime/` and removes session dirs whose `(agent_id, session_id)` pair doesn't match a live row in crew's agents table — handles orphans from agents that crashed without `agent_close`.
+
+### Open questions for discussion
+
+1. **Persistent agents' runtime state.** Persona-bearing agents (Fondant, Brioche) currently write `session-state.md` and `journal.db` directly into their persona base (`.knowledge/persona/<name>/meta/`, `.knowledge/persona/<name>/journal.db`). Should they also move to `~/.crew/runtime/`, or do they continue writing into their persona base (since their persona is persistent)?
+2. **Where journal.db lives for persistent agents.** Today the journal IS persistent identity. Personae need a permanent journal. Probably the persona base keeps the journal; only session-state and precompact recovery move out.
+3. **Cross-machine handoffs.** If handoff crosses machines (fleet_move), the runtime state needs to travel too. crew-fleet's existing path-translation might already handle this; needs verification.
+4. **PreCompact hook target.** The PreCompact hook today writes precompact/recovery-*.md inside `.knowledge/meta/precompact/`. Under this model it would write to `~/.crew/runtime/<agent_id>/<session_id>/precompact/`. Hook scripts need updating; the boot skill needs to read from the new location.
+
+This appendix is open like Appendix A. The base model stands; ephemeral state location is a separable concern.
