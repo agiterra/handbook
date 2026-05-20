@@ -379,9 +379,67 @@ Handoff target has a different `agent_id` and a different `session_id`. Mechanic
 
 ### Open questions for discussion
 
-1. **Persistent agents' runtime state.** Persona-bearing agents (Fondant, Brioche) currently write `session-state.md` and `journal.db` directly into their persona base (`.knowledge/persona/<name>/meta/`, `.knowledge/persona/<name>/journal.db`). Should they also move to `~/.crew/runtime/`, or do they continue writing into their persona base (since their persona is persistent)?
-2. **Where journal.db lives for persistent agents.** Today the journal IS persistent identity. Personae need a permanent journal. Probably the persona base keeps the journal; only session-state and precompact recovery move out.
-3. **Cross-machine handoffs.** If handoff crosses machines (fleet_move), the runtime state needs to travel too. crew-fleet's existing path-translation might already handle this; needs verification.
-4. **PreCompact hook target.** The PreCompact hook today writes precompact/recovery-*.md inside `.knowledge/meta/precompact/`. Under this model it would write to `~/.crew/runtime/<agent_id>/<session_id>/precompact/`. Hook scripts need updating; the boot skill needs to read from the new location.
+1. **Persistent agents' runtime state.** Persona-bearing agents (Fondant, Brioche) currently write `session-state.md` directly into the vault. Should they move to `~/.crew/runtime/`, or do they continue writing into their persona base (since their persona is persistent)?
+2. **Cross-machine handoffs.** If handoff crosses machines (fleet_move), the runtime state needs to travel too. crew-fleet's existing path-translation might already handle this; needs verification.
+3. **PreCompact hook target.** The PreCompact hook today writes precompact/recovery-*.md inside `.knowledge/meta/precompact/`. Under this model it would write to `~/.crew/runtime/<agent_id>/<session_id>/precompact/`. Hook scripts need updating; the boot skill needs to read from the new location.
 
 This appendix is open like Appendix A. The base model stands; ephemeral state location is a separable concern.
+
+---
+
+## Appendix C: Per-base journals + reference resolution (correction)
+
+**Status: incorporated, replacing an earlier draft.**
+
+An earlier draft of this RFC prescribed that journal.db belongs only to persona bases. **That was wrong** — Brioche (via Tim) flagged that journal entries are referenced cross-base (e.g., `[j:34]` in a feedback file). If only personae have journals, cross-base references break.
+
+Correct model: **every base has its own journal**. Code bases, role bases, persona bases each maintain their own `journal.db`.
+
+### Layout
+
+```
+.knowledge/
+  code/
+    journal.db                 ← code-base journal (project decisions, incidents)
+  role/
+    toolsmith/
+      journal.db               ← toolsmith role journal (convention evolution)
+    engineer/
+      journal.db
+  persona/
+    fondant/
+      journal.db               ← fondant persona journal (operator interactions, identity)
+```
+
+### Reference resolution
+
+| Form | Meaning |
+|---|---|
+| `[j:34]` (bare) | Journal entry 34 in the SAME base as the file referencing it. Common case; stays terse. |
+| `[persona/fondant:j:62]` | Cross-base reference within the same vault. |
+| `[role/toolsmith:j:18]` | Same form for roles. |
+| `[code:j:5]` | Code base (singleton, no nested name). |
+| `[<vault>:<base>:j:<seq>]` | Fully qualified across vaults. Rarely needed in inline docs. |
+
+### Migration
+
+Existing `.knowledge/journal.db` migrates wholesale into the auto-detected destination base for the vault (e.g., Fondant's existing journal moves to `persona/fondant/journal.db`). Bare `[j:N]` references inside that base's files continue to resolve correctly without backfilling — they now refer to the same-base journal, which contains the same historical entries.
+
+Cross-base references that may have existed implicitly in the old single-journal world (when a feedback file in one conceptual area referenced an entry from another) need a one-time scrub on migration if the destination is different from the source. The migration tool can flag these but doesn't auto-rewrite — the operator reviews.
+
+### API
+
+`knowledge-tools` v1.0.0:
+
+```ts
+export function journalAdd(vault: string, base: Base, entry: JournalEntry): number;  // returns seq
+export function journalGet(vault: string, base: Base, seq: number): JournalEntry;
+export function journalSearch(vault: string, basesInScope: Base[], query: string): JournalSearchResult[];
+```
+
+Journal search defaults to merging across all in-scope bases. Reference rendering picks the shortest unambiguous form.
+
+### Open questions
+
+1. **Promotion of journal entries.** Can `/knowledge:promote` move a journal entry from one base to another? Probably yes, with the new entry getting a new seq in the target's journal and a "see also: <old-base>:j:N" linkback. Or simpler: journals are append-only, promotion copies and leaves the original.
+2. **Cross-base journal queries from inside an agent.** When the toolsmith role's prompt says "remember the autosponsor incident, [code:j:5]" — does knowledge-tools need a way for an agent reading the role base to follow that link to the code base? Likely yes; today's `/knowledge:journal get <seq>` skill would need to take the base prefix.
