@@ -243,3 +243,81 @@ Steps 1–4 are sequential (schema gates everything). Steps 5–7 can land in pa
 - Vendor-specific (Claude Code vs Codex) divergence in the base format. Bases are vendor-neutral; vendor-specific surfaces (CLAUDE.md, AGENTS.md) reference but don't mirror them.
 - A2A / x402 integration. Separate concern, separate RFC.
 - Cross-machine vault federation (multi-machine sync of bases). Bases sync via their git remotes today; federation is a Wire-level concern.
+
+---
+
+## Appendix A: Seance composition (for discussion)
+
+**Status: open question, awaiting team input.**
+
+Today `seance:summon fondant` works because `agiterra/Fondant` is a self-contained repo that bundles three concepts into one place: a working code dir, a persona, and (effectively) a role's expertise. The base model proposed in this RFC splits these into three distinct things, which means `seance` needs to learn how to compose them.
+
+### The three pieces
+
+| Concept | Lives in | Plurality per summon | Tracked by |
+|---|---|---|---|
+| **Code repo** | the git repo that becomes the working dir | 1 (the root) | its own .git |
+| **Persona** | `.knowledge/persona/<name>/` | 0 or 1 | a nested git repo, gitignored from the working dir |
+| **Roles** | `.knowledge/role/<name>/` | 0 or many | nested git repos, gitignored from the working dir |
+
+The code repo is the **root**. Personae and roles are **overlays** layered into its `.knowledge/`. Seance assembles them at summon time; they're not conflated in storage.
+
+### Proposed seance UX
+
+**Explicit form:**
+
+```bash
+seance:summon \
+  --code agiterra/agiterra \
+  --persona mividtim/fondant-persona \
+  --role toolsmith
+```
+
+Steps:
+
+1. `git clone github:agiterra/agiterra` → working dir
+2. `cd <working-dir>/.knowledge/persona/ && git clone github:mividtim/fondant-persona fondant`
+3. For each role: `cd <working-dir>/.knowledge/role/ && git clone <role-source> <role-name>`
+4. Spawn an agent in the working dir with the persona + role(s) declared in its CLAUDE.md or equivalent
+5. Add nested clones to `.gitignore` of the working dir (so PR'ing back to the code repo never includes them)
+
+**Alias form (sugar over explicit):**
+
+```yaml
+# Shipped defaults in seance-tools, or user override at ~/.config/seance/aliases.yaml
+aliases:
+  fondant:
+    code: github:agiterra/agiterra
+    persona: github:mividtim/fondant-persona
+    roles: [toolsmith]
+  brioche:
+    code: github:agiterra/fabrica-v3
+    persona: github:mividtim/brioche-persona
+    roles: [engineer, solidity-engineer]
+  toolsmith:
+    code: github:agiterra/agiterra
+    # no persona — anonymous toolsmith
+    roles: [toolsmith]
+```
+
+`seance:summon fondant` → expands to the explicit form for that alias. Same for `seance:summon toolsmith` (no persona — just code + role).
+
+### PR-back composition
+
+When the summoned agent runs `seance:promote-back`, the target depends on which base the changes live in:
+
+- Changes in `.knowledge/role/<name>/` → PR to that role's upstream
+- Changes in `.knowledge/persona/<name>/` → PR to that persona's upstream (usually the operator's private repo)
+- Changes in `.knowledge/code/` or anywhere else in the working dir → PR to the code repo's upstream
+
+PII guard runs against each PR's diff before opening, with awareness of which base it came from (toolsmith PR uses the toolsmith repo's denylist; persona PR uses the operator's local denylist).
+
+### Open questions for discussion
+
+1. **Persona discoverability.** Aliases require the persona repo's URL to be configured somewhere. For team-shared personae (multiple developers using "Brioche"), should the meta-repo ship a `personae.yaml` that lists the canonical persona repos? Or is persona configuration always operator-local?
+2. **Role catalog.** Should there be a central registry of known roles (the agiterra meta-repo's `.knowledge/role/`)? Or are roles distributed per-author?
+3. **Code-repo-less summons.** Is there a meaningful "headless" summon — Toolsmith without any code repo, just for chatting? Or does every summon require a working code dir?
+4. **Deprecating `agiterra/Fondant`.** Once Fondant is reassembled from `agiterra/agiterra` + `mividtim/fondant-persona`, what happens to the old `agiterra/Fondant` repo? Archive? Convert to an alias resolver? Delete?
+5. **Backwards-compat window.** Current `seance:summon fondant` (one-piece self-contained repo) needs to keep working until the migration completes. How long is the bridge period, and what's the migration UX for someone caught mid-stream?
+
+This appendix is intentionally open. The base model from the RFC body stands either way; this is purely about how seance's CLI/composition adapts to it.
