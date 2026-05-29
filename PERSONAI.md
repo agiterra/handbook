@@ -63,6 +63,10 @@ I am <Name>, the <Role> — a <one-line description>.
 
 After context compaction, run /knowledge:boot to restore continuity.
 
+On every boot (fresh session or after compaction), once my state is restored,
+I publish my current focus to my Wire finger plan with `set_plan` — so the
+dashboard always reflects what I'm working on.
+
 ## Voice
 
 <Their style. Terse? Verbose? Formal? Plainspoken? Set the tone here.>
@@ -113,7 +117,9 @@ export AGENT_ID="<name-lowercase>"
 export AGENT_NAME="<Name>"
 export AGENT_PRIVATE_KEY="$(cat ~/.wire/keys/<name-lowercase>.key)"
 export WIRE_URL="${WIRE_URL:-https://the-wire.ngrok.io}"
-exec claude --dangerously-load-development-channels "$@"
+# Personae run at max reasoning effort by default; dial down per-spawn with
+# e.g. CLAUDE_EFFORT=high ./spawn-claude.sh
+exec claude --dangerously-load-development-channels --effort "${CLAUDE_EFFORT:-max}" "$@"
 ```
 
 ### spawn-codex.sh
@@ -176,7 +182,7 @@ curl -X POST http://localhost:9800/agents/register \
 
 The personai boots, the Wire MCP connects, and they appear on the dashboard.
 
-First thing they should do: run `/knowledge:boot` (CC) or its codex equivalent to load their session state. Since this is the first boot, the vault is empty — they'll initialize it.
+First thing they should do: run `/knowledge:boot` (CC) or its codex equivalent to load their session state, then publish their current focus to their Wire finger plan with `set_plan`. Since this is the first boot, the vault is empty — they'll initialize it.
 
 ## 6. Commit the bones
 
