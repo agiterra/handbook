@@ -93,7 +93,8 @@ You don't have to install everything. Start small:
 That gives you a single agent with persistent memory who can talk to other agents (if you spin them up).
 
 **Recommended for an orchestrator**
-- Add `crew` — so you can spawn and manage other agents
+- Add `bridge` — the orchestrator's plugin. It collapses the multi-step orchestration dances (register identity → assemble env → launch agent → place pane → attach → kick off the task) into single composite MCP calls (`spawn`, `handoff`, `close`, `compose-brief`, `health`, …). Bridge stays domain-naive: capability-specific behavior (GitHub, Linear, …) ships as separate `bridge-X` integration plugins. It spawns agents at the `project_dir` you hand it and forwards their env — it does **not** create worktrees or manage project layout (that's the consumer's and the agent's concern).
+- Add `crew` — spawn and manage agents in persistent screen sessions (bridge builds on this)
 - Add `operator-relay` — so when you talk to your personai's ephemeral kids, your message reaches them
 - Add `knowledge-indexer` — auto-indexes vault writes for semantic + keyword search
 
