@@ -34,9 +34,10 @@ Per the [CORE.md plugin map](./CORE.md#4-the-plugin-map):
 **Recommended** — adds orchestration:
 ```
 /plugin install crew@agiterra
-/plugin install operator-relay@agiterra
 /plugin install knowledge-indexer@agiterra
 ```
+
+> `operator-relay@agiterra` is **worker-side**, not an orchestrator plugin — it runs on the ephemeral agents you spawn (a UserPromptSubmit hook that relays operator prompts up to their manager). Install it into the project root your workers spawn in, not as part of your own orchestrator stack. See the [plugin map](./CORE.md#4-the-plugin-map).
 
 **Optional, situational** — add as needed:
 ```
