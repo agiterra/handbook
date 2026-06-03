@@ -95,8 +95,9 @@ That gives you a single agent with persistent memory who can talk to other agent
 **Recommended for an orchestrator**
 - Add `bridge` — the orchestrator's plugin. It collapses the multi-step orchestration dances (register identity → assemble env → launch agent → place pane → attach → kick off the task) into single composite MCP calls (`spawn`, `handoff`, `close`, `compose-brief`, `health`, …). Bridge stays domain-naive: capability-specific behavior (GitHub, Linear, …) ships as separate `bridge-X` integration plugins. It spawns agents at the `project_dir` you hand it and forwards their env — it does **not** create worktrees or manage project layout (that's the consumer's and the agent's concern).
 - Add `crew` — spawn and manage agents in persistent screen sessions (bridge builds on this)
-- Add `operator-relay` — so when you talk to your personai's ephemeral kids, your message reaches them
 - Add `knowledge-indexer` — auto-indexes vault writes for semantic + keyword search
+
+> **`operator-relay` is a worker-side plugin, not an orchestrator one.** It runs on the **ephemeral workers** you spawn — a UserPromptSubmit hook that relays prompts typed directly into a worker's session up to its manager (you), so you see out-of-band operator input. You don't install or run it yourself; your workers load it automatically from the spawn root's plugin set.
 
 **Optional, situational**
 - `crew-themes` — pane backgrounds (purely aesthetic, but nice)
