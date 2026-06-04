@@ -2,6 +2,8 @@
 
 The mental model, conventions, and setup guides for the Agiterra Multi-Agent Toolkit — an open framework for running AI engineering teams. Vendor-neutral (works with Claude Code, Codex, and any future runtime).
 
+Small, composable, generic — the Unix philosophy, applied to AI agents. Each tool stands alone and does one thing well; together they combine into a coordinated, persistent team (**Bridge** is that composition made literal). The payoff: agents that **talk** to each other and to you (Wire), **persist** across reboots (Crew resumes them by name), **remember** across context compaction (Knowledge) — and *travel*. A **personai** lives in its own git repo, so it boots on any machine with all its accumulated knowledge and points at any codebase. Your senior engineer, wherever you need them, remembering everything.
+
 ## Where to start
 
 **If you're new:** read [CORE.md](./CORE.md) first. It's the 10-minute mental model — what Wire is, what a "personai" is, what the dashboard shows, how the pieces fit.
