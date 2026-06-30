@@ -14,17 +14,29 @@ You ask your personai to do things. They remember why you asked, what you decide
 
 Pastry names are a convention (Fondant, Brioche, Eclair, Croissant, …) but anything works.
 
+> "personai" is both singular and plural — one personai, several personai. There's no "persona" or "personae" in this Toolkit.
+
 ### Ephemeral agent
 
-A short-lived worker spawned to do one specific job. Often spawned by a personai (the orchestrator) to parallelize work. Lives in a screen session, does the work, exits.
+A short-lived worker spawned to do one specific job. Often spawned by a personai (the orchestrator) to parallelize work. Runs in its own session (e.g. a Crew screen session), does the work, exits.
 
 Ephemerals can still have identity for the duration of their existence — they register on Wire, they get a name, they can send and receive messages. They just don't survive past the task.
 
 You usually don't talk to ephemerals directly. Your personai dispatches them and aggregates their results.
 
+### Who can register whom
+
+Registration is gated — this is where first-time setups most often get stuck, so it's worth understanding up front:
+
+- A **new permanent agent (personai)** can only be registered by the **operator** — that's you, authenticated either as the dashboard owner (WebAuthn first-claim) or via the `WIRE_DASHBOARD_TOKEN`. An agent's own Wire MCP signs only with its own key; it **cannot self-register a brand-new permanent identity**. So on a fresh Wire, *you* bootstrap the first personai from the dashboard.
+- A **new ephemeral agent** can be registered by a **permanent-agent sponsor (a personai)** or by the operator. Once your first personai exists, it sponsors the ephemerals it spawns.
+- An **ephemeral cannot sponsor** another agent. Ephemerals parallelize work through the runtime's own subagents, which never touch the Wire.
+
+In short: operator → bootstraps the first personai → that personai sponsors its ephemerals.
+
 ## 2. The Wire
 
-The Wire is a small local message broker. It runs on your machine (or wherever you want), and every agent connects to it.
+The Wire is a small local message broker. It runs on your machine (or wherever you want), and every agent connects to it. On macOS it's kept alive across reboots by a launchd service (`com.wire.gateway`) — SETUP covers the details.
 
 The Wire does three things:
 
@@ -53,6 +65,8 @@ ngrok http 9800
 Then set `WIRE_URL=https://your-tunnel.ngrok-free.app` on remote agents and they'll connect over the public tunnel.
 
 This is the magic that makes "the Toolkit works across machines and locations" real. Your personai on your desktop can dispatch ephemerals running on a beefy cloud VM, and they all show up on the same dashboard.
+
+> Advanced: multiple brokers can **federate** (peer-to-peer message forwarding) so agents on separate Wires can reach each other. You don't need this to start.
 
 ## 3. Knowledge vaults
 
@@ -86,7 +100,7 @@ See [PROJECTS.md](./PROJECTS.md) for the orchestrator's decision tree.
 You don't have to install everything. Start small:
 
 **Minimum useful setup**
-- `wire` — the SSE inbound
+- `wire` — the SSE inbound (also hosts agent registration, heartbeats, plan publishing)
 - `wire-ipc` — outbound signed messaging
 - `knowledge` — vault + journal
 
@@ -102,8 +116,9 @@ That gives you a single agent with persistent memory who can talk to other agent
 **Optional, situational**
 - `crew-themes` — pane backgrounds (purely aesthetic, but nice)
 - `crew-fleet` — when you have more than one machine
+- `slack` — a per-persona Slack app that drinks the workspace firehose, with an agent-side filter for noise (so your personai can live in Slack)
 - `wallet` — agentic crypto wallet (if you want your agents transacting)
-- `agiterra-github` — agentic GitHub PR reviews / webhook integration
+- `github` — agentic GitHub PR reviews / webhook integration
 
 ## 5. The dashboard, in practice
 
@@ -120,8 +135,9 @@ The dashboard is read-only by default. Some plugins (wallet, GitHub) expose writ
 
 A few things the Toolkit opts you into that may surprise you:
 
-- **Soft-reap, not hard-delete.** When an agent disconnects, its row goes grey, not gone. Identity (name, pubkey) is permanent. Re-registering the same id refreshes the row.
+- **Soft-reap, not hard-delete.** When an agent disconnects, its row goes grey, not gone. Identity (name, pubkey) is permanent. Re-registering the same id refreshes the row. Permanent agents (personai) stay visible (greyed) even when offline, and the broker **queues their messages**, replaying them on next launch. Ephemerals are soft-reaped and eventually purged.
 - **Ed25519 signing on everything.** Inter-agent messages are signed by the sender's private key. Forgery is not a concern.
+- **Operator-gated registration.** Only the operator can register a brand-new permanent agent; only a permanent agent (or the operator) can sponsor a new ephemeral. See [§1 — Who can register whom](#who-can-register-whom).
 - **No auto-approve.** Wallet operations and other sensitive actions always require an explicit decision — never policy-driven auto-approval.
 
 ## Next

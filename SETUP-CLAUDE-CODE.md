@@ -8,7 +8,9 @@ If you have a Claude Code agent open right now, just say:
 
 > "Install the Agiterra marketplace and set up the minimum-useful Agiterra Multi-Agent Toolkit on my machine."
 
-Your agent should be able to follow [the manual path below](#manual-path) and ask only what it genuinely needs (your GitHub username, ngrok preference, etc.).
+Your agent should be able to follow [the manual path below](#manual-path) and ask only what it genuinely needs (a pastry name for your first agent, whether you want ngrok, which optional plugins).
+
+One thing your agent **cannot** do for you: register the *first* permanent agent. That step needs **operator** auth (you, the dashboard owner). See [step 4](#4-bootstrap-your-first-agent-operator).
 
 ## Manual path
 
@@ -18,7 +20,7 @@ Your agent should be able to follow [the manual path below](#manual-path) and as
 /plugin marketplace add agiterra/claude-marketplace
 ```
 
-This adds Agiterra's plugin registry to your Claude Code. Plugins appear in `/plugin install`.
+This adds Agiterra's plugin registry to your Claude Code. Plugins then appear in `/plugin install`.
 
 ### 2. Pick your stack
 
@@ -33,43 +35,73 @@ Per the [CORE.md plugin map](./CORE.md#4-the-plugin-map):
 
 **Recommended** — adds orchestration:
 ```
+/plugin install bridge@agiterra
 /plugin install crew@agiterra
 /plugin install knowledge-indexer@agiterra
 ```
 
-> `operator-relay@agiterra` is **worker-side**, not an orchestrator plugin — it runs on the ephemeral agents you spawn (a UserPromptSubmit hook that relays operator prompts up to their manager). Install it into the project root your workers spawn in, not as part of your own orchestrator stack. See the [plugin map](./CORE.md#4-the-plugin-map).
+> `bridge` is the orchestrator's plugin — it collapses the register → assemble-env → launch → place-pane → attach → kick-off dance into single composite calls (`spawn`, `handoff`, `close`, …) and builds on `crew`.
+> `operator-relay@agiterra` is **worker-side**, not an orchestrator plugin — it runs on the ephemeral agents you spawn (a UserPromptSubmit hook that relays operator prompts up to their manager). It loads automatically from your workers' spawn-root plugin set; you don't install it into your own stack. See the [plugin map](./CORE.md#4-the-plugin-map).
 
 **Optional, situational** — add as needed:
 ```
 /plugin install crew-themes@agiterra
 /plugin install crew-fleet@agiterra
+/plugin install github@agiterra
+/plugin install slack@agiterra
 /plugin install wallet-claude-code@agiterra
-/plugin install agiterra-github@agiterra
 ```
 
 ### 3. Run The Wire
 
-The Wire is a small Bun server. Clone and run:
+The Wire ships as a standalone, checksum-verified binary with a one-command installer (no clone, no `bun install`):
 
 ```bash
-cd ~/Projects
-git clone https://github.com/agiterra/wire.git
-cd wire
-bun install
-bun run src/index.ts
+curl -fsSL https://raw.githubusercontent.com/agiterra/wire/main/scripts/install.sh | bash
 ```
 
-Wire is now on `http://localhost:9800`. Open it in a browser — you'll see an empty dashboard.
+This detects your platform, fetches and verifies the matching release binary, installs it to `~/.wire/bin/wire`, writes a default config at `~/.wire/.env`, and installs a service that keeps Wire running across reboots:
 
-For convenience, the Wire repo includes a launchd plist (macOS) to keep it running across reboots. See its README.
+- **macOS**: `~/Library/LaunchAgents/com.wire.gateway.plist` (launchd)
+- **Linux**: `~/.config/systemd/user/wire.service` (systemd --user)
 
-### 4. Register your first agent
+Config lives at `~/.wire/.env`, data at `~/.wire/wire.db`, logs at `~/.wire/wire.log`. (Full details, version pinning, and manual install are in the Wire repo's `INSTALL.md`.)
 
-In your Claude Code session, ask your agent:
+Verify it's up:
 
-> "Register me on Wire as a persistent agent named `<your-pastry-name>`. Boot the wire MCP with the keypair so I appear on the dashboard."
+```bash
+curl -fsS http://localhost:9800/health
+# {"status":"ok","ts":...}
+```
 
-Your agent has the `register_agent` tool now (via `mcp__plugin_wire_wire__register_agent`). They'll generate a keypair, register on Wire, and store the private key for future sessions.
+Wire is now on `http://localhost:9800`. Open it in a browser — you'll land on the login screen (the first passkey claims ownership; see the next step).
+
+### 4. Bootstrap your first agent (operator)
+
+This is the step that trips people up. A **new permanent agent** (a personai) can only be registered with **operator** authority — the dashboard owner. An agent's own `register_agent` tool signs with *its own* key, so it cannot conjure agent #1 out of nothing. The chicken needs an egg.
+
+So you, the operator, bootstrap the first personai. Two ways:
+
+**A. Via the dashboard (recommended).**
+1. Open `http://localhost:9800`. The first time, the login page says "Claim this instance" — register a passkey (WebAuthn). The first passkey to claim becomes the owner.
+2. Once signed in, use the dashboard's **register form** to add your first agent: an id (your pastry name, lowercase), a display name, and its Ed25519 public key. The dashboard registers it as a **permanent** agent.
+
+You'll need a keypair for that pubkey. Generate one and stash the private key where your spawn script will read it (see [PERSONAI.md](./PERSONAI.md), which wires `AGENT_ID` / `AGENT_PRIVATE_KEY` into the agent's environment).
+
+**B. Via the dashboard token (headless / scripted).**
+Set `WIRE_DASHBOARD_TOKEN=<secret>` in `~/.wire/.env` and reload the service, then:
+
+```bash
+curl -X POST "http://localhost:9800/agents/register?token=$WIRE_DASHBOARD_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"<your-pastry-name>","display_name":"<Your Display Name>","pubkey":"<base64-ed25519-pubkey>","permanent":true}'
+```
+
+The operator token (or an operator session) is what satisfies the server's `new-permanent` auth gate.
+
+Once that first personai is registered and its spawn script exports `AGENT_PRIVATE_KEY`, **it** can sponsor any further agents — including ephemeral workers — using its own `register_agent` tool. (Only permanent agents may sponsor; an ephemeral cannot spawn another ephemeral on the Wire — ephemerals use the runtime's own subagents for parallel work, which never touch the Wire.)
+
+> The wire and wire-ipc plugins read `AGENT_ID` and `AGENT_PRIVATE_KEY` from the session environment to sign and connect. The keypair from this step must be exported when you launch the agent — the personai spawn script does this for you (see [PERSONAI.md](./PERSONAI.md)).
 
 ### 5. (Optional) Expose Wire over ngrok
 
@@ -79,7 +111,8 @@ If you want cross-machine or remote access:
 ngrok http 9800
 ```
 
-Set `WIRE_URL=https://your-tunnel.ngrok-free.app` in `~/.wire/env` (or wherever you keep your env) so other agents connect to your Wire.
+- For **agents connecting in** from elsewhere, set `WIRE_URL=https://your-tunnel.ngrok-free.app` in their environment (e.g. their spawn script or `~/.wire/.env`). `WIRE_URL` is a *client* setting — it tells a connecting agent where the broker is; it has no effect on the running server.
+- For the **dashboard + WebAuthn login** to work over the tunnel, the *server* needs to know its public hostname: set `WIRE_RP_ID` (and, if needed, `WIRE_ORIGIN`) to your tunnel host in `~/.wire/.env` and reload the service. A passkey is bound to one domain, so the RP ID must match the host you actually log in from.
 
 ### 6. Verify
 
@@ -93,14 +126,16 @@ You should see the message appear in the message log.
 
 ## Next
 
-- [PERSONAI.md](./PERSONAI.md) — make your agent a full persistent personai with vault + spawn scripts
+- [PERSONAI.md](./PERSONAI.md) — make your agent a full persistent personai with vault + spawn scripts (and the keypair wiring referenced in step 4)
 - [PROJECTS.md](./PROJECTS.md) — the parent-repo + submodules + worktrees pattern
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Dashboard shows agent as grey | Wire-MCP's SSE has dropped. Restart your Claude Code session, or read the wire-tools logs at `~/.wire/wire-connection.jsonl`. |
-| `register_agent` says "sponsor not initialized" | Your Claude Code session doesn't have `AGENT_PRIVATE_KEY` set. The wire MCP needs an identity to sign with. Bootstrap one by registering yourself first. |
-| Messages don't arrive | Check the Wire dashboard's message log. If messages are landing but not routed, check the destination agent's name. If they're not landing at all, check `WIRE_URL` matches the running Wire. |
-| ngrok shows "1 simultaneous session limit" | Could be a real conflict OR ngrok-side outage. Check status.ngrok.com first — ngrok shows the same error for both. |
+| Dashboard shows agent as grey | Wire-MCP's SSE has dropped. Restart your Claude Code session (or `/plugin` reload the wire plugin), or read the wire-tools logs at `~/.wire/wire-connection.jsonl`. |
+| Registering the first agent fails with "operator authentication required" (401) | A new **permanent** agent needs operator auth. Claim the dashboard with a passkey, or set `WIRE_DASHBOARD_TOKEN` and pass `?token=` (see [step 4](#4-bootstrap-your-first-agent-operator)). `register_agent` from an unregistered agent will not work for agent #1. |
+| `register_agent` says "sponsor not initialized" | The wire MCP has no `AGENT_PRIVATE_KEY` in its environment, so it has no identity to sign with. For an existing sponsor, ensure the spawn env exports it. For the very first agent, you can't sponsor at all yet — bootstrap via the operator path in step 4. |
+| `agent_exists_pubkey_mismatch` (HTTP 409) on register | The id already exists with a different key. Don't silently rotate a live agent's keypair. Only pass `force_rotate: true` once you've confirmed no live process still holds the old key. |
+| Messages don't arrive | Check the Wire dashboard's message log. If messages land but aren't routed, check the destination agent's id. If they don't land at all, check `WIRE_URL` matches the running Wire. |
+| ngrok shows "1 simultaneous session limit" | Could be a real conflict OR an ngrok-side outage. Check status.ngrok.com first — ngrok shows the same error for both. |

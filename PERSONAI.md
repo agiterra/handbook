@@ -1,6 +1,6 @@
 # Setting up a personai
 
-A "personai" is a persistent AI agent — a persona-AI. They have a name, a vault, a GitHub repo of their own, and a `spawn-claude.sh` / `spawn-codex.sh` that boots them on any machine.
+A "personai" is a permanent AI agent. They have a name, a vault, a GitHub repo of their own, and a `spawn-claude.sh` / `spawn-codex.sh` that boots them on any machine. The term is "personai" — singular and plural, never persona/personae.
 
 This guide walks an operator (and their agent) through setting one up end-to-end. Read [CORE.md](./CORE.md) first if you haven't yet.
 
@@ -10,12 +10,12 @@ A personai is **owned by no project**. They're a person, not a worker. They have
 
 - A name (Fondant, Brioche, Eclair, Croissant — pastry naming is convention, not requirement)
 - A home directory (`~/Projects/<Name>/`) outside any code repo
-- A GitHub repo (`<your-username>/<Name>`) containing their identity
+- A GitHub repo (`<your-org-or-username>/<Name>`) containing their identity
 - A vault (`.knowledge/`) of their accumulated experience
 - A `CLAUDE.md` / `AGENTS.md` that defines who they are
 - One or more spawn scripts that boot them with the right environment
 
-They can work on any project, but they're not OF any project.
+They can work on any project, but they're not OF any project. Contrast with an **ephemeral** — a short-lived worker a personai spawns to parallelize one job, then soft-reaps. A personai persists across days, machines, and reboots; an ephemeral does not. (See [CORE.md](./CORE.md) for the full identity model.)
 
 ## 1. Pick a name
 
@@ -29,7 +29,7 @@ Pick something pronounceable, short, and unused. Check your local org and Wire d
 mkdir -p ~/Projects/<Name>
 cd ~/Projects/<Name>
 git init
-gh repo create <your-org>/<Name> --private --source=. --remote=origin
+gh repo create <your-org-or-username>/<Name> --private --source=. --remote=origin
 ```
 
 The repo is private by default — your personai's vault contains things only they should see.
@@ -105,7 +105,7 @@ dashboard always reflects what I'm working on.
 My memory lives at `.knowledge/` in this project root.
 ```
 
-Look at an existing personai's CLAUDE.md for a template — [Fondant's](https://github.com/agiterra/Fondant/blob/main/CLAUDE.md) is a working example.
+Look at an existing personai's `CLAUDE.md` for a template — Fondant's is a working example.
 
 ### spawn-claude.sh
 
@@ -116,8 +116,9 @@ cd "$(dirname "$0")"
 export AGENT_ID="<name-lowercase>"
 export AGENT_NAME="<Name>"
 export AGENT_PRIVATE_KEY="$(cat ~/.wire/keys/<name-lowercase>.key)"
-export WIRE_URL="${WIRE_URL:-https://the-wire.ngrok.io}"
-# Personae run at max reasoning effort by default; dial down per-spawn with
+# Local default is http://localhost:9800; use your ngrok URL for a remote agent.
+export WIRE_URL="${WIRE_URL:-http://localhost:9800}"
+# Personai run at max reasoning effort by default; dial down per-spawn with
 # e.g. CLAUDE_EFFORT=high ./spawn-claude.sh
 exec claude --dangerously-load-development-channels --effort "${CLAUDE_EFFORT:-max}" "$@"
 ```
@@ -131,7 +132,7 @@ cd "$(dirname "$0")"
 export AGENT_ID="<name-lowercase>"
 export AGENT_NAME="<Name>"
 export AGENT_PRIVATE_KEY="$(cat ~/.wire/keys/<name-lowercase>.key)"
-export WIRE_URL="${WIRE_URL:-https://the-wire.ngrok.io}"
+export WIRE_URL="${WIRE_URL:-http://localhost:9800}"
 exec ~/.wire/codex-launch.sh "$@"
 ```
 
@@ -144,11 +145,14 @@ Make them executable: `chmod +x spawn-*.sh`.
 
 ## 4. Register on Wire
 
-Generate a keypair and register the agent. From an existing personai you have running:
+Registration is operator-gated. Before you generate keys, understand **who is allowed to register whom** on a Wire (enforced by the broker at `POST /agents/register`):
 
-> "Register me a new personai named `<name>` and stash the private key in `~/.wire/keys/<name>.key`."
+- **A new _permanent_ agent (a personai) — operator only.** The operator is the dashboard owner (WebAuthn first-claim) or anyone holding `WIRE_DASHBOARD_TOKEN`. An agent's own `wire` MCP signs only with its own key and **cannot** self-register a new permanent agent. So the **first** personai on a fresh Wire must be bootstrapped by you, the operator.
+- **A new _ephemeral_ agent — a permanent-agent sponsor OR the operator.** A running personai sponsors ephemeral workers via the `register_agent` MCP tool (it signs the request with the sponsor's `AGENT_PRIVATE_KEY`). An ephemeral **cannot** sponsor another ephemeral (the broker returns `403 sponsor_not_permanent`) — ephemerals use the runtime's subagents for parallel work, which never touch the Wire.
 
-Or manually:
+So the old "ask your agent to register itself" instruction does not work for agent #1 — there's a chicken-and-egg: you need a permanent agent to sponsor, but only the operator can create the first permanent agent. Bootstrap it yourself.
+
+### Generate the keypair
 
 ```bash
 mkdir -p ~/.wire/keys
@@ -163,14 +167,22 @@ bun -e 'import("./src/crypto.ts").then(async ({generateKeyPair, exportPrivateKey
 })' > ~/.wire/keys/<name>.key 2> /tmp/pubkey.txt
 
 PUBKEY=$(grep -oE '[A-Za-z0-9+/=]+$' /tmp/pubkey.txt)
+```
 
-# Register on Wire
-curl -X POST http://localhost:9800/agents/register \
+### Register as a permanent agent (operator auth)
+
+Easiest path: register the new personai from the **dashboard** while you're signed in as the operator (WebAuthn). If you're scripting it, authenticate with the dashboard token — `permanent: true` registrations are rejected with `401 operator authentication required` otherwise:
+
+```bash
+# Operator auth via the dashboard token (query param ?token=, or a wire_token cookie).
+curl -X POST "http://localhost:9800/agents/register?token=$WIRE_DASHBOARD_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"id\":\"<name>\",\"display_name\":\"<Name>\",\"pubkey\":\"$PUBKEY\",\"permanent\":true}"
 ```
 
-`permanent: true` is important — it marks the agent as a persistent identity that should never be hard-deleted from the dashboard.
+`permanent: true` is important — it marks the agent as a persistent identity. Permanent agents stay visible on the dashboard even when offline (greyed, not deleted), and the broker queues their messages and replays them on the next launch. (Ephemerals, by contrast, are soft-reaped and their dependent rows purged.)
+
+> **About `register_agent` (the `wire` MCP tool).** This is a _sponsor_ tool. A running personai uses it to (a) sponsor ephemeral workers and (b) un-grey or rotate **its own** existing key. It signs with the caller's key and never sets `permanent: true`, so it cannot create a new personai. Creating a new personai is always the operator-bootstrap flow above.
 
 ## 5. First boot
 
@@ -197,7 +209,7 @@ The vault itself (`.knowledge/`) is committed over time as the personai accumula
 
 ## What's NOT in the personai repo
 
-- Project code. Personai works ON projects but doesn't own them. Code lives in project repos.
+- Project code. Personai work ON projects but don't own them. Code lives in project repos.
 - Other agents' identities or keys. Each personai owns only their own.
 - Shared team knowledge. That goes in the project's `.knowledge/`, not yours.
 
@@ -207,8 +219,8 @@ See [PROJECTS.md](./PROJECTS.md) for how personai work on projects.
 
 The whole point of the personai pattern is portability. To move a personai to a new machine:
 
-1. `git clone <your-org>/<Name>` into `~/Projects/<Name>` on the new machine
-2. Copy `~/.wire/keys/<name>.key` over (or generate a new pair and `register_agent({id, pubkey, force_rotate: true})` to rotate)
+1. `git clone <your-org-or-username>/<Name>` into `~/Projects/<Name>` on the new machine
+2. Copy `~/.wire/keys/<name>.key` over. If you'd rather mint a new key, the personai can rotate its **own** key once it's running — `register_agent({ id: '<name>', force_rotate: true })` (this path is gated by the agent's existing key, so only the agent itself or the operator can do it). Rotating permanently locks out any process still holding the old key.
 3. Make sure `WIRE_URL` points to the right Wire (ngrok URL if remote)
 4. `~/Projects/<Name>/spawn-claude.sh` and you're back
 

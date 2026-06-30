@@ -15,9 +15,11 @@ This is the single most important architectural rule. Every Agiterra plugin fami
 **All real logic lives in `<X>-tools`.** The adapter packages exist only to:
 - Declare the right runtime (`bin: ./server.ts`)
 - Pin their `-tools` dependency to a specific tag
-- Set runtime-specific `postInstall` (e.g., `bun install --frozen-lockfile` for CC)
+- Set runtime-specific `postInstall` (CC adapters run a `bun install` variant — `bun install --frozen-lockfile` for wire/wire-ipc/bridge; crew prepends a `bash ensure-bun.sh` bootstrap; some, like knowledge, use a plain `bun install`)
 
-Concrete reference: [`wire-claude-code/server.ts`](https://github.com/agiterra/wire-claude-code/blob/main/server.ts) is six lines.
+Concrete reference: [`wire-claude-code/server.ts`](https://github.com/agiterra/wire-claude-code/blob/main/server.ts) is a handful of lines — it imports `startServer` from `@agiterra/wire-tools` and calls it.
+
+Not every family has a `-codex` adapter yet (as of this writing, wire, wire-ipc, crew, knowledge, github, and operator-relay do; bridge, slack, crew-fleet, knowledge-indexer, and wallet ship CC-only). The three-package layout is still the target: when you add a runtime adapter, it should stay thin and pin `-tools` by tag.
 
 Why this matters:
 
@@ -39,8 +41,8 @@ Three big plugin families. They stay distinct:
 
 Cross-cutting features compose via **conventions, not imports**. Examples of doing it right:
 
-- `operator-relay` uses Wire IPC to forward prompts — it doesn't reach into Wire's internals or crew's screen state. It just publishes a Wire message.
-- The `$STY` env var convention bridges Wire's "deliver to codex" use case with the screen sessions Crew manages. Wire doesn't import crew; it reads a Unix-level env var that screen sets.
+- `operator-relay` uses Wire to forward operator prompts from an ephemeral worker to its managing agent — it doesn't reach into Wire's internals or crew's screen state. It just publishes a Wire message.
+- The `$STY` env var convention bridges Wire's "deliver to codex" use case with the screen sessions Crew manages. Wire doesn't import crew; it reads a Unix-level env var that screen sets (see `wire-tools/src/http.ts`, which derives the screen name from `env.STY`).
 
 If you're building something that needs Crew AND Wire AND Knowledge to all know about each other, you're probably solving the wrong problem. Step back.
 
@@ -53,7 +55,7 @@ If you're building something that needs Crew AND Wire AND Knowledge to all know 
 
 ### PR checklist
 
-- [ ] If you touched a `-tools` package, the change works on BOTH `-claude-code` and `-codex` adapters (or you've documented why one doesn't apply)
+- [ ] If you touched a `-tools` package, the change works on every adapter that exists for that family (today that's `-claude-code` and, where present, `-codex`) — or you've documented why one doesn't apply
 - [ ] If you bumped a `-tools` version, you've also bumped the dependent adapter package.json AND the corresponding `.claude-plugin/plugin.json` version
 - [ ] You tagged the new version (`git tag vX.Y.Z && git push --tags`) AFTER merging
 - [ ] You added tests if the change touches Wire's protocol, Crew's lifecycle, or Knowledge's vault format
@@ -66,10 +68,10 @@ When you bump a `-tools` package, the adapters MUST bump atomically:
 
 1. Update `<X>-tools/package.json` version + tag
 2. Update `<X>-claude-code/package.json` dep pin + plugin.json version
-3. Update `<X>-codex/package.json` dep pin + plugin.json version
+3. Update `<X>-codex/package.json` dep pin + plugin.json version (where a `-codex` adapter exists)
 4. Tag each adapter at its new version
 
-A `-tools` bump without adapter bumps means CC and codex agents are reading stale code. There's no "library auto-tracks main" — adapters pin to tags.
+A `-tools` bump without adapter bumps means CC and codex agents are reading stale code. There's no "library auto-tracks main" — adapters pin to tags. Adapter and `-tools` versions are independent (an adapter at `2.10.0` may pin `wire-tools#v2.13.0`); the rule is that the dep pin must point at the tag carrying the code you intend to ship.
 
 ## Coding standards
 
@@ -122,4 +124,4 @@ Be precise. Be direct. Don't waste people's time. Read the docs before asking. W
 
 ## License
 
-By contributing, you agree your contributions are licensed under MIT (or whatever license the specific plugin uses — see its `LICENSE` file).
+By contributing, you agree your contributions are licensed under the license declared in that package's `package.json` `license` field. The `-tools` packages are MIT; adapters may differ (for example, `wire-claude-code` is Apache-2.0). When in doubt, check the `license` field in the package you're touching before opening a PR.

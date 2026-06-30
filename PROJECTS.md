@@ -47,7 +47,8 @@ Is this knowledge tightly coupled to a single service or library?
   → That submodule's own .knowledge/ if it has one; otherwise project vault with a clear tag.
 
 Is this knowledge tactical / session-only (current task state, in-progress reasoning)?
-  → Not a vault at all. Use TaskCreate / TaskUpdate. Vaults are for things that should outlive the session.
+  → Not a vault at all. Use your runtime's task/todo tracking (e.g. TaskCreate / TaskUpdate on
+    Claude Code). Vaults are for things that should outlive the session.
 ```
 
 Concrete examples:
@@ -59,7 +60,7 @@ Concrete examples:
 | "Fabrica uses React Server Components + Next.js 16 on Vercel" | Project vault |
 | "The `fabrica-v3` parent-repo's submodules pin via `tim/<ticket>` branch convention" | Project vault |
 | "I learned that `bun install` fails silently when the lockfile is stale" | Personai vault (your learning) |
-| "ENG-3149 is in flight, branch is X" | NOT a vault. TaskUpdate or session-state.md. |
+| "ENG-3149 is in flight, branch is X" | NOT a vault. Runtime task tracking or session-state.md. |
 
 ## Worktrees per submodule
 
@@ -73,6 +74,8 @@ git worktree add ../worktrees/<engineer>/<ticket-branch> -b tim/<ticket>
 ```
 
 Each engineer (personai or ephemeral) gets their own worktree per ticket. Their CWD when working is `~/Projects/<Project>/worktrees/<engineer>/<ticket-branch>/<submodule>`. The CLAUDE.md / project vault is still discoverable via parent-repo path lookup.
+
+> **Who creates the worktree?** The orchestrator (or the agent itself), not the spawn tool. `bridge`'s `spawn` launches an agent at a `project_dir` and forwards its env — it deliberately does **not** lay out worktrees or manage project structure. Project layout is the consumer's concern, which is exactly what this doc describes.
 
 When the ticket merges, drop the worktree:
 
@@ -146,7 +149,7 @@ git submodule add git@github.com:<org>/<service-b>.git
 
 The orchestrator (a senior personai — often the "engineering director") is responsible for:
 
-1. **Spawning engineers** to work on submodule branches, per ticket
+1. **Spawning engineers** to work on submodule branches, per ticket — via `bridge`'s `spawn` (which collapses the register → env → launch → pane → attach dance into one call). The orchestrator sets up the worktree first, then hands its path to `spawn` as the `project_dir`.
 2. **Aggregating results** — checking on engineers, reading their wrap-ups, coordinating cross-engineer dependencies
 3. **Routing knowledge** — when an engineer learns something, the orchestrator decides whether it goes to that engineer's personai vault, the project vault, or both
 4. **PR coordination** — once an engineer's branch is ready, the orchestrator triggers review pipelines and merges
@@ -156,5 +159,5 @@ The orchestrator is NOT writing code themselves. They're the architect + dispatc
 ## Cross-references
 
 - Per-engineer setup: [PERSONAI.md](./PERSONAI.md)
-- Spawning ephemeral engineers: the [crew plugin README](https://github.com/agiterra/crew-claude-code)
+- Spawning engineers (orchestrator): the `bridge` plugin — see [CORE.md §4](./CORE.md). Bridge's `spawn` is the one-call surface; it builds on the [crew plugin](https://github.com/agiterra/crew-claude-code), which manages the underlying screen sessions and panes.
 - Identity model: [CORE.md](./CORE.md)
