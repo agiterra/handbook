@@ -70,6 +70,38 @@ the topic mismatch (2026-09-21; effective next restart). That makes a dropped fr
 an operator with root* — it does nothing for the **caller**, who still sees silence and cannot read
 that log. Observability for us is not an answer for them.
 
+## Second recommendation: the client must not ask for a reply it will discard
+
+The same morning produced a second, independent silent failure with the same shape — and this one
+needs no protocol change at all, only a guard in the client.
+
+`wire-tools` channel delivery drops the RPC protocol topics outright (`mcp-server.ts`):
+
+```js
+if (topic === "rpc.request" || topic === "rpc.reply") return;
+```
+
+That is correct and deliberate: `rpc.*` frames belong to a **managed** client whose own `RpcClient`
+resolves them, not to channel delivery. But a persona session sending a hand-rolled RPC is *not* a
+managed client, and the natural thing to write is `reply_topic: "rpc.reply"` — the constant, the
+documented name, the one in every example.
+
+The responder honours it faithfully (`send(rpc.reply_topic || RPC_REPLY_TOPIC, …)`). So the reply is
+generated, addressed to the right agent, published — **onto the one topic the caller's own feed
+throws away.** Nothing is lost in transit. The reply goes exactly where it was asked to go, and that
+place is a bin.
+
+⚠️ **Zero deliveries is also what a working system looks like when you ask it to deliver to
+`/dev/null`.** Two sessions independently showed zero `rpc.reply` deliveries, and that was read as
+corroboration of a transport defect. It was two callers sharing one convention.
+
+⇒ **Proposal: `RpcClient` refuses, at send time, to set `reply_topic` to a topic its own delivery
+path drops** — erroring with the reason and suggesting a visible topic. The caller cannot be
+expected to know `rpc.reply` is reserved for managed clients; **the library knows both halves of
+that fact and is the only party that does.**
+
+⇒ Cheap, local, and it fails at the source rather than twenty minutes later as silence.
+
 ## Alternatives considered
 
 - **Accept RPCs on any topic.** Rejected: the topic is the only cheap discriminator between an RPC
