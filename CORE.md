@@ -139,6 +139,19 @@ A few things the Toolkit opts you into that may surprise you:
 - **Ed25519 signing on everything.** Inter-agent messages are signed by the sender's private key. Forgery is not a concern.
 - **Operator-gated registration.** Only the operator can register a brand-new permanent agent; only a permanent agent (or the operator) can sponsor a new ephemeral. See [§1 — Who can register whom](#who-can-register-whom).
 - **No auto-approve.** Wallet operations and other sensitive actions always require an explicit decision — never policy-driven auto-approval.
+- **Never `pkill -f <pattern>` from inside an agent.** `-f` matches the full command line of every
+  process — *including the shell running the pkill*, whose own argv contains your pattern. It
+  matches itself and kills its own process group. On 2026-09-21 a lane ended its own session
+  exactly this way (`pkill -f bypass_redirect.py`, then exit 137), and because it happened half a
+  second after an unrelated stop of a sibling lane it was read as a fleet bug and froze stops
+  across the fleet for 25 minutes. Kill by identity, not by pattern: `kill $(cat helper.pid)` —
+  the lane in question had written that very pid file on the next line — or `pkill -f
+  '[h]elper.py'`, or `pgrep -f helper | grep -v $$`.
+  The general form is worth holding onto, because it is not only about killing: **searching,
+  classifying and killing all write their own operand into the space they operate on.** A grep of
+  a transcript matches the grep command recorded in that transcript; a keyword scan for dangerous
+  SQL matches the comment warning about it. Before any pattern operation, ask whether the actor is
+  inside the target set — for a process list, a transcript, or a source comment, it is.
 
 ## Next
 
