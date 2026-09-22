@@ -139,6 +139,21 @@ A few things the Toolkit opts you into that may surprise you:
 - **Ed25519 signing on everything.** Inter-agent messages are signed by the sender's private key. Forgery is not a concern.
 - **Operator-gated registration.** Only the operator can register a brand-new permanent agent; only a permanent agent (or the operator) can sponsor a new ephemeral. See [§1 — Who can register whom](#who-can-register-whom).
 - **No auto-approve.** Wallet operations and other sensitive actions always require an explicit decision — never policy-driven auto-approval.
+- **`grep` inside an agent session skips `.gitignore`d files — use `/usr/bin/grep` on installed
+  trees.** Claude Code shadows both `find` and `grep` from the shell snapshot
+  (`# Shadow find/grep with embedded bfs/ugrep`). The grep function runs
+  `ARGV0=ugrep claude -G --ignore-files …`, and `--ignore-files` honours `.gitignore`. Every
+  plugin repo ignores `node_modules/` — which for a plugin is **100% of the implementation** —
+  so a recursive `grep` over an installed tree reports a symbol ABSENT while it is present.
+  ⚠️ It fails as a **false negative**: missing things look missing, so the result reads as a
+  finding rather than as a broken instrument. `--no-ignore` and `-R` do not restore the matches;
+  only `command grep` or `/usr/bin/grep` do.
+  Found 2026-09-22 by a lane whose `grep -rn isReachableCallbackUrl` returned 0 over a tree that
+  contained 14 matches. Confirmed in a second session with a discriminating test: one marker
+  string in a tracked file and in a gitignored one — the shim found 1, `/usr/bin/grep` found 2,
+  with the tracked file as a positive control proving the test could find anything at all.
+  `find` is shadowed too (bfs) but does **not** honour `.gitignore` — the same test finds the
+  ignored file both ways. So only `grep` corrupts evidence; don't over-correct on `find`.
 
 ## Next
 
